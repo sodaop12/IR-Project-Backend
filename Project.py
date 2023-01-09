@@ -64,7 +64,20 @@ def preProcess(s):
     s = [ps.stem(w) for w in s]
     s = ' '.join(s)
     return s
+def learningtorank():
+    anime = pd.read_csv('resource/anime.csv')
+    rating = pd.read_csv('resource/anime_rating_1000_users.csv')
+    anime_features = ['MAL_ID', 'English name', 'Japanese name', 'Score', 'Genres', 'Popularity', 'Members','Name',
+                      'Favorites', 'Watching', 'Completed', 'On-Hold', 'Dropped', 'Score-1', 'Score-2', 'Score-3',
+                      'Score-4', 'Score-5', 'Score-6', 'Score-7', 'Score-8', 'Score-9', 'Score-10', ]
 
+    anime = anime[anime_features]
+
+    merged_df = anime.merge(rating, left_on='MAL_ID', right_on='anime_id', how='inner')
+    genre_names = ['Action', 'Adventure','Comedy', 'Drama','Sci-Fi',
+                   'Game', 'Space', 'Music', 'Mystery', 'School', 'Fantasy',
+                   'Horror', 'Kids', 'Sports', 'Magic', 'Romance',]
+    return genre_names,merged_df,anime,rating
 def getanimedata():
     anime = pd.read_csv('resource/anime_withpic.csv')
     rating = pd.read_csv('resource/anime_rating_1000_users.csv')
@@ -85,11 +98,12 @@ def SerchanimeByName():
     BM25 = m3.BM25
     bm25AnimeName = BM25(vectorizer)
     bm25AnimeName.fit(AnimeName)
-    query = ("full")
+    pickle.dump(bm25AnimeName, open('resource/Bm25SerchByName.pkl', 'wb'))
+    query = ("fullmetal")
     score = bm25AnimeName.transform(query)
     rank = np.argsort(score)[::-1]
     print(anime.iloc[rank[:10]].to_markdown())
-    pickle.dump(bm25AnimeName, open('resource/Bm25SerchByName.pkl', 'wb'))
+
 
 
 def SerchanimeBySynopsis():
@@ -106,20 +120,6 @@ def SerchanimeBySynopsis():
     rank = np.argsort(score)[::-1]
     print(anime.iloc[rank[:10]].to_markdown())
     pickle.dump(bm25AnimeSynopsis, open('resource/Bm25SerchBySynopsis.pkl', 'wb'))
-def learningtorank():
-    anime = pd.read_csv('resource/anime.csv')
-    rating = pd.read_csv('resource/anime_rating_1000_users.csv')
-    anime_features = ['MAL_ID', 'English name', 'Japanese name', 'Score', 'Genres', 'Popularity', 'Members','Name',
-                      'Favorites', 'Watching', 'Completed', 'On-Hold', 'Dropped', 'Score-1', 'Score-2', 'Score-3',
-                      'Score-4', 'Score-5', 'Score-6', 'Score-7', 'Score-8', 'Score-9', 'Score-10', ]
-
-    anime = anime[anime_features]
-
-    merged_df = anime.merge(rating, left_on='MAL_ID', right_on='anime_id', how='inner')
-    genre_names = ['Action', 'Adventure','Comedy', 'Drama','Sci-Fi',
-                   'Game', 'Space', 'Music', 'Mystery', 'School', 'Fantasy',
-                   'Horror', 'Kids', 'Sports', 'Magic', 'Romance',]
-    return genre_names,merged_df,anime,rating
 
 def genre_to_category(df):
     genre_names,merged_df,anime,rating = learningtorank()
