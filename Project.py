@@ -12,7 +12,7 @@ from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from elasticsearch import Elasticsearch
 import numpy as np
 from sklearn.model_selection import train_test_split
-
+from spellchecker import SpellChecker
 import M3 as m3
 
 app = Flask(__name__)
@@ -66,7 +66,7 @@ def preProcess(s):
     return s
 def learningtorank():
     anime = pd.read_csv('resource/anime.csv')
-    rating = pd.read_csv('resource/anime_rating_1000_users.csv')
+    rating = pd.read_csv('resource/anime_rating_new.csv')
     anime_features = ['MAL_ID', 'English name', 'Japanese name', 'Score', 'Genres', 'Popularity', 'Members','Name',
                       'Favorites', 'Watching', 'Completed', 'On-Hold', 'Dropped', 'Score-1', 'Score-2', 'Score-3',
                       'Score-4', 'Score-5', 'Score-6', 'Score-7', 'Score-8', 'Score-9', 'Score-10', ]
@@ -226,6 +226,7 @@ def test():
     )
 
     model.predict(test.iloc[:10][features])
+    pickle.dump(model, open('resource/modelanime.pkl', 'wb'))
 
 
 def predict(user_df,top_k, anime, rating):
@@ -243,7 +244,6 @@ def predict(user_df,top_k, anime, rating):
           pred_df[col] = user_df[col].values[0]
 
     preds = model.predict(pred_df[features])
-    pickle.dump(model, open('resource/modelanime.pkl', 'wb'))
     topk_idx = np.argsort(preds)[::-1][:top_k]
 
     recommend_df = pred_df.iloc[topk_idx].reset_index(drop=True)
@@ -259,11 +259,68 @@ def predict(user_df,top_k, anime, rating):
 
     return recommend_df
 
+def spellcker():
+    spell = SpellChecker()
+    genre_names, merged_df, anime, rating = getanimedata()
+    anime['title'] = anime['title'].apply(preProcess)
+    pickle.dump(anime['title'], open('resource/titlepre.pkl', 'wb'))
+    spell.word_frequency.load_words(anime['title'])
+    word = 'na ruto'
+    print(spell.correction(word))
+    print(spell.candidates(word))
+
+def spellckersyn():
+    spell = SpellChecker()
+    genre_names, merged_df, anime, rating = getanimedata()
+    anime['synopsis'] = anime['synopsis'].astype(str)
+    anime['synopsis'] = anime['synopsis'].apply(preProcess)
+    pickle.dump(anime['synopsis'], open('resource/synpre.pkl', 'wb'))
+    spell.word_frequency.load_words(anime['synopsis'])
+    word = 'pokemo'
+    print(spell.candidates(word))
+
+
 def predicttest():
     genre_names, merged_df, anime, rating = learningtorank()
     user_df = rating.copy().loc[rating['user_id'] == 12]
     user_df = make_user_feature(user_df)
     predict(user_df, 10, anime, rating)
+
+app.load_words = pickle.load(open('resource/titlepre.pkl', 'rb'))
+@app.route('/CorrectionName', methods=['POST'])
+def CorrectionName():
+    response_object = {'status': 'success'}
+    spell = SpellChecker()
+    requests = request.get_json()
+    query = json.dumps(requests)
+    print(query)
+    parsed_json = json.loads(query)
+    query = parsed_json.get("Word")
+    print(query)
+    spell.word_frequency.load_words(app.load_words)
+    word = spell.candidates(query)
+    word_list = str(word)
+    response_object = word_list
+    print(response_object)
+    return response_object
+
+app.load_wordsyn = pickle.load(open('resource/synpre.pkl', 'rb'))
+@app.route('/CorrectionSyn', methods=['POST'])
+def CorrectionSyn():
+    response_object = {'status': 'success'}
+    spell = SpellChecker()
+    requests = request.get_json()
+    query = json.dumps(requests)
+    print(query)
+    parsed_json = json.loads(query)
+    query = parsed_json.get("Wordsyn")
+    print(query)
+    spell.word_frequency.load_words(app.load_wordsyn)
+    word = spell.candidates(query)
+    word_list = str(word)
+    response_object = word_list
+    print(response_object)
+    return response_object
 
 app.vecterizer = pickle.load(open('resource/Bm25SerchByName.pkl', 'rb'))
 @app.route('/SerachByName', methods=['POST'])
@@ -274,10 +331,10 @@ def FlaskSearhByName():
     query = json.dumps(requests)
     parsed_json = json.loads(query)
     query = parsed_json.get("Name")
-    print(query)
-    score = app.vecterizer.transform(query)
+    processquery = preProcess(query)
+    score = app.vecterizer.transform(processquery)
     rank = np.argsort(score)[::-1]
-    response_object = anime.iloc[rank[:10]].to_json()
+    response_object = anime.iloc[rank[:10]].T.to_json()
     return response_object
 
 app.vecterizersyn = pickle.load(open('resource/Bm25SerchBySynopsis.pkl', 'rb'))
@@ -292,7 +349,7 @@ def FlaskSearhBySysnopsis():
     print(query)
     score = app.vecterizersyn.transform(query)
     rank = np.argsort(score)[::-1]
-    response_object = anime.iloc[rank[:10]].to_json()
+    response_object = anime.iloc[rank[:10]].T.to_json()
     return response_object
 
 @app.route('/predictanime', methods=['POST'])
@@ -314,5 +371,13 @@ def predictanime():
     response_object = jsonify(results)
 
     return response_object
+
+@app.route('/GetAnimeName', methods=['GET'])
+def AnimeName():
+    genre_names, merged_df, anime, rating = getanimedata()
+    response_object = anime['title'].T.to_json()
+    return response_object
+
+
 if __name__ == '__main__':
     app.run(debug=True)
